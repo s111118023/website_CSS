@@ -178,14 +178,15 @@
         // Game Config
         const GOAL = 2000;
         const TIME_LIMIT = 60;
-        const SWING_SPEED = 0.03;
-        const CLAW_SHOOT_SPEED = 12; // Faster for better feel
+        const SWING_SPEED = 0.025; // 稍微放慢擺動速度 (原本 0.03)
+        const CLAW_SHOOT_SPEED = 8; // 放慢發射速度 (原本 12)
         const BASE_REEL_SPEED = 10;
         
         let gameState = 'MENU'; 
         let score = 0;
         let timeLeft = TIME_LIMIT;
         let timerInterval;
+        let animationId; // 用來追蹤動畫迴圈 ID，防止速度疊加
         
         // Colors from reference image
         const COLORS = {
@@ -212,13 +213,15 @@
         let waveOffset = 0;
 
         // Item Definitions
+        // 增加了好考卷的數量 (count)，提高得分機率
         const ITEM_TYPES = [
-            { id: 'small', val: 75, weight: 1.2, radius: 25, color: '#ecf0f1', text: '75', count: 5, type: 'scroll' },
-            { id: 'small_good', val: 90, weight: 1.4, radius: 28, color: '#ecf0f1', text: '90', count: 4, type: 'scroll' },
-            { id: 'perfect', val: 100, weight: 2.2, radius: 35, color: '#fff9c4', text: '100', count: 3, type: 'scroll_gold' },
-            { id: 'god', val: 500, weight: 4.5, radius: 45, color: '#f39c12', text: '500', count: 2, type: 'scroll_god' },
-            { id: 'cheat', val: -800, weight: 0.8, radius: 22, color: '#95a5a6', text: 'X', count: 8, type: 'trash' },
-            { id: 'bonus', val: 800, weight: 6.0, radius: 40, color: '#9b59b6', text: '證書', count: 1, type: 'cert' }
+            { id: 'small', val: 75, weight: 1.2, radius: 25, color: '#ecf0f1', text: '75', count: 8, type: 'scroll' },      // 5 -> 8
+            { id: 'small_good', val: 90, weight: 1.4, radius: 28, color: '#ecf0f1', text: '90', count: 7, type: 'scroll' }, // 4 -> 7
+            { id: 'perfect', val: 100, weight: 2.2, radius: 35, color: '#fff9c4', text: '100', count: 6, type: 'scroll_gold' }, // 3 -> 6
+            { id: 'god', val: 500, weight: 4.5, radius: 45, color: '#f39c12', text: '500', count: 4, type: 'scroll_god' },  // 2 -> 4
+            // Cheat sheet count remains 5
+            { id: 'cheat', val: -800, weight: 0.8, radius: 26, color: '#bdc3c7', text: '作弊', count: 5, type: 'cheat' },
+            { id: 'bonus', val: 800, weight: 6.0, radius: 40, color: '#9b59b6', text: '證書', count: 2, type: 'cert' }      // 1 -> 2
         ];
 
         function resize() {
@@ -245,6 +248,53 @@
             ctx.save();
             ctx.translate(x, y);
             
+            // Handle Cheat Sheet (Crumpled Paper)
+            if (style === 'cheat') {
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.arc(4, 4, radius, 0, Math.PI*2);
+                ctx.fill();
+
+                // Crumpled Paper Body (Jagged polygon)
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                const jaggedness = 5;
+                const sides = 8;
+                for (let i = 0; i <= sides; i++) {
+                    const angle = (i / sides) * Math.PI * 2;
+                    const r = radius + (Math.random() - 0.5) * jaggedness; // Add noise to radius
+                    // Use fixed pseudo-random based on angle to make it "wiggle" slightly less or look consistent
+                    // Actually, just drawing a fixed polygon is better for performance, but small jitter is fine
+                    const x = Math.cos(angle) * (radius - 2);
+                    const y = Math.sin(angle) * (radius - 2);
+                    if (i===0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                
+                // Creases (Internal lines)
+                ctx.strokeStyle = '#95a5a6';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-radius/2, -radius/2); ctx.lineTo(0, 0);
+                ctx.moveTo(radius/3, radius/2); ctx.lineTo(-radius/4, 0);
+                ctx.moveTo(radius/2, -radius/3); ctx.lineTo(0, radius/4);
+                ctx.stroke();
+
+                // Text
+                ctx.fillStyle = '#c0392b'; // Dark Red for danger
+                ctx.font = `bold ${radius * 0.7}px "VT323"`; // Smaller font for '作弊'
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, 0, 0);
+
+                ctx.restore();
+                return;
+            }
+
+            // Normal Scrolls
             // Shadow
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.fillRect(-w/2 + 4, -h/2 + 4, w, h);
@@ -262,11 +312,9 @@
             
             // Decoration lines
             ctx.fillStyle = '#bdc3c7';
-            if (style !== 'trash') {
-                ctx.fillRect(-w/2 + 5, -h/2 + 15, w - 10, 2);
-                ctx.fillRect(-w/2 + 5, -h/2 + 25, w - 10, 2);
-                ctx.fillRect(-w/2 + 5, -h/2 + 35, w - 10, 2);
-            }
+            ctx.fillRect(-w/2 + 5, -h/2 + 15, w - 10, 2);
+            ctx.fillRect(-w/2 + 5, -h/2 + 25, w - 10, 2);
+            ctx.fillRect(-w/2 + 5, -h/2 + 35, w - 10, 2);
 
             // Special Borders
             if (style === 'scroll_gold' || style === 'scroll_god') {
@@ -287,22 +335,11 @@
 
             // Text
             ctx.fillStyle = (parseInt(text) > 0) ? '#c0392b' : '#2c3e50';
-            if (style === 'trash') ctx.fillStyle = '#7f8c8d';
             
             ctx.font = `bold ${radius}px "VT323"`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(text, 0, 5); // Slight offset
-
-            // Trash visuals
-            if (style === 'trash') {
-                ctx.strokeStyle = '#2c3e50';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(-w/2+5, -h/2+5); ctx.lineTo(w/2-5, h/2-5);
-                ctx.moveTo(w/2-5, -h/2+5); ctx.lineTo(-w/2+5, h/2-5);
-                ctx.stroke();
-            }
 
             ctx.restore();
         }
@@ -336,6 +373,11 @@
                 this.x = 50 + Math.random() * (canvas.width - 100);
                 this.y = 200 + Math.random() * (canvas.height - 250);
                 this.rotation = (Math.random() - 0.5) * 0.5; // Slight tilt
+                
+                // For crumpled paper randomness
+                if (def.type === 'cheat') {
+                    this.rotation = Math.random() * Math.PI * 2; // More random rotation for trash
+                }
             }
             draw() {
                 ctx.save();
@@ -384,6 +426,9 @@
         }
 
         function startGame() {
+            // 防止動畫迴圈重複執行導致速度變快
+            if (animationId) cancelAnimationFrame(animationId);
+
             score = 0;
             timeLeft = TIME_LIMIT;
             scoreDisplay.textContent = score;
@@ -634,7 +679,7 @@
         function animate() {
             update();
             draw();
-            requestAnimationFrame(animate);
+            animationId = requestAnimationFrame(animate);
         }
 
         // Controls
