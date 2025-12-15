@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>深海成績單大盜 - 豪華版</title>
+    <!-- 引入復古像素字體 -->
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #2c3e50;
+            font-family: 'VT323', monospace; /* 復古字體 */
+            user-select: none;
+            -webkit-user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        /* 模擬復古螢幕外框 */
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 1024px; /* 限制最大寬度以保持像素感 */
+            max-height: 768px;
+            background: #000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated; /* 讓 canvas 呈現像素風格 */
+        }
+
+        /* UI 層 */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .hud-text {
+            color: #fff;
+            font-size: 28px;
+            text-shadow: 2px 2px 0px #000;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        }
+
+        .value-text {
+            color: #f1c40f;
+        }
+
+        .author-tag {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #ecf0f1;
+            font-size: 20px;
+            text-shadow: 1px 1px 0 #000;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-family: 'Noto Sans TC', sans-serif; /* 作者名保持清晰 */
+        }
+
+        /* Modal Styles - 像素風格 */
+        #game-modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #e6c288;
+            border: 4px solid #5d4037;
+            padding: 30px;
+            box-shadow: 8px 8px 0px rgba(0,0,0,0.5);
+            text-align: center;
+            pointer-events: auto;
+            min-width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 100;
+            image-rendering: pixelated;
+        }
+
+        .modal-title {
+            font-size: 42px;
+            color: #8e44ad;
+            margin: 0;
+            text-shadow: 2px 2px #fff;
+            text-transform: uppercase;
+        }
+
+        .modal-text {
+            font-size: 24px;
+            color: #5d4037;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        .btn {
+            background: #e74c3c;
+            color: #fff;
+            border: 4px solid #c0392b;
+            padding: 15px 20px;
+            font-size: 28px;
+            font-family: 'VT323', monospace;
+            cursor: pointer;
+            transition: all 0.1s;
+            text-transform: uppercase;
+            box-shadow: 4px 4px 0px #7f2a1e;
+        }
+
+        .btn:active {
+            transform: translate(4px, 4px);
+            box-shadow: none;
+        }
+
+        .btn:hover {
+            background: #ff6b6b;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="ui-layer">
+            <div>
+                <div class="hud-text">SCORE: <span id="score-display" class="value-text">0</span></div>
+                <div class="hud-text">GOAL : <span id="goal-display" class="value-text">2000</span></div>
+                <div class="hud-text">TIME : <span id="time-display" class="value-text">60</span></div>
+            </div>
+            <div class="author-tag">
+                作者: 111118023何泠琳
+            </div>
+        </div>
+
+        <div id="game-modal">
+            <h1 class="modal-title">深海成績單大盜</h1>
+            <p class="modal-text">海底撈分大作戰！<br>避開作弊紙條，搶救滿分考卷！</p>
+            <p class="modal-text" style="font-size: 20px; color: #d35400;">
+                目標: 2000分 | 懲罰: -800分
+            </p>
+            <button class="btn" onclick="startGame()">INSERT COIN / START</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
+        const timeDisplay = document.getElementById('time-display');
+        const modal = document.getElementById('game-modal');
+        const modalTitle = document.querySelector('.modal-title');
+        const modalText = document.querySelector('.modal-text');
+        const modalBtn = document.querySelector('.btn');
+
+        // Game Config
+        const GOAL = 2000;
+        const TIME_LIMIT = 60;
+        const SWING_SPEED = 0.03;
+        const CLAW_SHOOT_SPEED = 12; // Faster for better feel
+        const BASE_REEL_SPEED = 10;
+        
+        let gameState = 'MENU'; 
+        let score = 0;
+        let timeLeft = TIME_LIMIT;
+        let timerInterval;
+        
+        // Colors from reference image
+        const COLORS = {
+            bgTop: '#5d4037',     // Dark Brown
+            bgMid: '#d3a978',     // Tan/Sand
+            water: '#3498db',     // Blue
+            waterDark: '#2980b9', // Darker Blue
+            foam: '#ecf0f1',      // White Foam
+            gold: '#f1c40f'
+        };
+
+        const miner = {
+            x: 0, y: 70, 
+            angle: Math.PI / 2, 
+            angleDir: 1,
+            state: 'SWINGING',
+            length: 60, minLength: 60, maxLength: 0,
+            targetItem: null
+        };
+
+        let items = [];
+        let particles = [];
+        let floatingTexts = [];
+        let waveOffset = 0;
+
+        // Item Definitions
+        const ITEM_TYPES = [
+            { id: 'small', val: 75, weight: 1.2, radius: 25, color: '#ecf0f1', text: '75', count: 5, type: 'scroll' },
+            { id: 'small_good', val: 90, weight: 1.4, radius: 28, color: '#ecf0f1', text: '90', count: 4, type: 'scroll' },
+            { id: 'perfect', val: 100, weight: 2.2, radius: 35, color: '#fff9c4', text: '100', count: 3, type: 'scroll_gold' },
+            { id: 'god', val: 500, weight: 4.5, radius: 45, color: '#f39c12', text: '500', count: 2, type: 'scroll_god' },
+            { id: 'cheat', val: -800, weight: 0.8, radius: 22, color: '#95a5a6', text: 'X', count: 8, type: 'trash' },
+            { id: 'bonus', val: 800, weight: 6.0, radius: 40, color: '#9b59b6', text: '證書', count: 1, type: 'cert' }
+        ];
+
+        function resize() {
+            const container = document.getElementById('game-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            miner.x = canvas.width / 2;
+            miner.maxLength = Math.sqrt(Math.pow(canvas.width, 2) + Math.pow(canvas.height, 2));
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- Drawing Helpers ---
+
+        function drawPixelRect(x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(Math.floor(x), Math.floor(y), Math.floor(w), Math.floor(h));
+        }
+
+        function drawScroll(x, y, radius, color, text, style) {
+            const w = radius * 1.8;
+            const h = radius * 2.2;
+            
+            ctx.save();
+            ctx.translate(x, y);
+            
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(-w/2 + 4, -h/2 + 4, w, h);
+
+            // Paper Body (Pixel art style curves = steps)
+            ctx.fillStyle = color;
+            
+            // Main rect
+            ctx.fillRect(-w/2, -h/2, w, h);
+            
+            // "Rolled" top and bottom effects
+            ctx.fillStyle = shadeColor(color, -20); // Darker
+            ctx.fillRect(-w/2, -h/2, w, 4); // Top edge
+            ctx.fillRect(-w/2, h/2 - 4, w, 4); // Bottom edge
+            
+            // Decoration lines
+            ctx.fillStyle = '#bdc3c7';
+            if (style !== 'trash') {
+                ctx.fillRect(-w/2 + 5, -h/2 + 15, w - 10, 2);
+                ctx.fillRect(-w/2 + 5, -h/2 + 25, w - 10, 2);
+                ctx.fillRect(-w/2 + 5, -h/2 + 35, w - 10, 2);
+            }
+
+            // Special Borders
+            if (style === 'scroll_gold' || style === 'scroll_god') {
+                ctx.strokeStyle = '#f1c40f';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(-w/2, -h/2, w, h);
+            }
+            if (style === 'cert') {
+                ctx.strokeStyle = '#8e44ad';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(-w/2, -h/2, w, h);
+                // Ribbon
+                ctx.fillStyle = '#c0392b';
+                ctx.beginPath();
+                ctx.arc(0, h/2 - 10, 8, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            // Text
+            ctx.fillStyle = (parseInt(text) > 0) ? '#c0392b' : '#2c3e50';
+            if (style === 'trash') ctx.fillStyle = '#7f8c8d';
+            
+            ctx.font = `bold ${radius}px "VT323"`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 0, 5); // Slight offset
+
+            // Trash visuals
+            if (style === 'trash') {
+                ctx.strokeStyle = '#2c3e50';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-w/2+5, -h/2+5); ctx.lineTo(w/2-5, h/2-5);
+                ctx.moveTo(w/2-5, -h/2+5); ctx.lineTo(-w/2+5, h/2-5);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        // Helper to darken colors
+        function shadeColor(color, percent) {
+            let R = parseInt(color.substring(1,3),16);
+            let G = parseInt(color.substring(3,5),16);
+            let B = parseInt(color.substring(5,7),16);
+
+            R = parseInt(R * (100 + percent) / 100);
+            G = parseInt(G * (100 + percent) / 100);
+            B = parseInt(B * (100 + percent) / 100);
+
+            R = (R<255)?R:255;  
+            G = (G<255)?G:255;  
+            B = (B<255)?B:255;  
+
+            let RR = ((R.toString(16).length==1)?"0"+R.toString(16):R.toString(16));
+            let GG = ((G.toString(16).length==1)?"0"+G.toString(16):G.toString(16));
+            let BB = ((B.toString(16).length==1)?"0"+B.toString(16):B.toString(16));
+
+            return "#"+RR+GG+BB;
+        }
+
+        // --- Classes ---
+
+        class Item {
+            constructor(def) {
+                this.def = def;
+                this.x = 50 + Math.random() * (canvas.width - 100);
+                this.y = 200 + Math.random() * (canvas.height - 250);
+                this.rotation = (Math.random() - 0.5) * 0.5; // Slight tilt
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                
+                // Draw based on type (simulate centered drawing by passing 0,0)
+                drawScroll(0, 0, this.def.radius, this.def.color, this.def.text, this.def.type);
+                
+                ctx.restore();
+            }
+        }
+
+        class FloatingText {
+            constructor(x, y, text, color) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.color = color;
+                this.life = 60;
+                this.vY = -1.5;
+            }
+            update() {
+                this.y += this.vY;
+                this.life--;
+            }
+            draw() {
+                ctx.globalAlpha = this.life / 60;
+                ctx.fillStyle = this.color;
+                ctx.font = '30px "VT323"';
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 3;
+                ctx.strokeText(this.text, this.x, this.y);
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // --- Game Logic ---
+
+        function spawnItems() {
+            items = [];
+            ITEM_TYPES.forEach(type => {
+                for(let i=0; i<type.count; i++) items.push(new Item(type));
+            });
+        }
+
+        function startGame() {
+            score = 0;
+            timeLeft = TIME_LIMIT;
+            scoreDisplay.textContent = score;
+            timeDisplay.textContent = timeLeft;
+            gameState = 'PLAYING';
+            miner.state = 'SWINGING';
+            miner.length = miner.minLength;
+            miner.targetItem = null;
+            
+            modal.classList.add('hidden');
+            spawnItems();
+            floatingTexts = [];
+            
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (gameState === 'PLAYING') {
+                    timeLeft--;
+                    timeDisplay.textContent = timeLeft;
+                    if (timeLeft <= 0) endGame();
+                }
+            }, 1000);
+            animate();
+        }
+
+        function endGame() {
+            gameState = 'END';
+            clearInterval(timerInterval);
+            modal.classList.remove('hidden');
+            
+            if (score >= GOAL) {
+                modalTitle.textContent = "任務完成！";
+                modalTitle.style.color = "#2ecc71";
+                modalText.innerHTML = `最終成績: <span style="color:#e74c3c; font-size:32px;">${score}</span> 分<br>學霸降臨！`;
+                modalBtn.textContent = "再次挑戰";
+            } else {
+                modalTitle.textContent = "不及格...";
+                modalTitle.style.color = "#e74c3c";
+                modalText.innerHTML = `最終成績: <span style="color:#e74c3c; font-size:32px;">${score}</span> 分<br>還差一點！`;
+                modalBtn.textContent = "重修 (Retry)";
+            }
+        }
+
+        function update() {
+            if (gameState !== 'PLAYING') return;
+
+            // Wave animation
+            waveOffset += 0.05;
+
+            // Floating Text
+            for(let i = floatingTexts.length-1; i>=0; i--) {
+                floatingTexts[i].update();
+                if(floatingTexts[i].life <= 0) floatingTexts.splice(i, 1);
+            }
+
+            // Claw
+            const clawX = miner.x + Math.cos(miner.angle) * miner.length;
+            const clawY = miner.y + Math.sin(miner.angle) * miner.length;
+
+            if (miner.state === 'SWINGING') {
+                miner.angle += SWING_SPEED * miner.angleDir;
+                if (miner.angle > Math.PI - 0.2 || miner.angle < 0.2) miner.angleDir *= -1;
+            } else if (miner.state === 'SHOOTING') {
+                miner.length += CLAW_SHOOT_SPEED;
+                
+                if (clawY > canvas.height - 20 || clawX < 0 || clawX > canvas.width) {
+                    miner.state = 'REELING';
+                }
+
+                if (!miner.targetItem) {
+                    for (let i = 0; i < items.length; i++) {
+                        const item = items[i];
+                        const dx = clawX - item.x;
+                        const dy = clawY - item.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        // Collision box
+                        if (dist < item.def.radius + 10) {
+                            miner.targetItem = item;
+                            miner.state = 'REELING';
+                            items.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+            } else if (miner.state === 'REELING') {
+                let speed = BASE_REEL_SPEED;
+                if (miner.targetItem) speed = BASE_REEL_SPEED / miner.targetItem.def.weight;
+                miner.length -= speed;
+
+                if (miner.length <= miner.minLength) {
+                    miner.length = miner.minLength;
+                    miner.state = 'SWINGING';
+                    if (miner.targetItem) {
+                        const val = miner.targetItem.def.val;
+                        score += val;
+                        scoreDisplay.textContent = score;
+                        
+                        // Add floating text
+                        const color = val > 0 ? '#f1c40f' : '#e74c3c';
+                        const txt = val > 0 ? `+${val}` : `${val}`;
+                        floatingTexts.push(new FloatingText(miner.x, miner.y + 100, txt, color));
+                        
+                        miner.targetItem = null;
+                    }
+                }
+            }
+        }
+
+        function drawBackground() {
+            // 1. Wall/Sky Gradient
+            const grad = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+            grad.addColorStop(0, COLORS.bgTop);
+            grad.addColorStop(1, COLORS.bgMid);
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Decorative horizontal lines (Wood effect)
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            for(let i=0; i<canvas.height*0.6; i+=40) {
+                ctx.fillRect(0, i, canvas.width, 2);
+            }
+
+            // 3. Water - Layer 1 (Darker, Slower)
+            ctx.fillStyle = COLORS.waterDark;
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height);
+            for(let x=0; x<=canvas.width; x+=20) {
+                const y = (canvas.height * 0.55) + Math.sin(x * 0.01 + waveOffset) * 10;
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.fill();
+
+            // 4. Water - Layer 2 (Lighter, Faster)
+            ctx.fillStyle = COLORS.water;
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height);
+            for(let x=0; x<=canvas.width; x+=20) {
+                const y = (canvas.height * 0.6) + Math.sin(x * 0.015 + waveOffset * 1.5 + 1) * 15;
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.fill();
+
+            // 5. Foam at water edge
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            for(let i=0; i<10; i++) {
+                // Random sparkles on water
+                if(Math.random() > 0.95) {
+                    const sx = Math.random() * canvas.width;
+                    const sy = (canvas.height * 0.6) + Math.random() * (canvas.height * 0.4);
+                    ctx.fillRect(sx, sy, 4, 4);
+                }
+            }
+        }
+
+        function drawClaw(x, y, angle) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle - Math.PI/2);
+
+            // Claw Color
+            ctx.fillStyle = '#95a5a6'; // Light grey
+            ctx.strokeStyle = '#2c3e50'; // Dark outline
+            ctx.lineWidth = 3;
+
+            // 1. Hub
+            ctx.beginPath();
+            ctx.arc(0, 0, 12, 0, Math.PI*2);
+            ctx.fill();
+            ctx.stroke();
+
+            // 2. Left Finger
+            ctx.beginPath();
+            ctx.moveTo(-10, 5);
+            ctx.lineTo(-25, 25);
+            ctx.lineTo(-15, 35);
+            ctx.lineTo(-5, 15);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // 3. Right Finger
+            ctx.beginPath();
+            ctx.moveTo(10, 5);
+            ctx.lineTo(25, 25);
+            ctx.lineTo(15, 35);
+            ctx.lineTo(5, 15);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // 4. Gear Detail
+            ctx.fillStyle = '#34495e';
+            ctx.beginPath();
+            ctx.arc(0,0, 5, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawBackground();
+
+            // Draw Miner Machine Base
+            ctx.fillStyle = '#7f8c8d'; // Grey metal
+            ctx.fillRect(miner.x - 25, 0, 50, 40); // Base
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(miner.x - 5, 0, 10, 70); // Pipe down
+
+            // Draw Line
+            const endX = miner.x + Math.cos(miner.angle) * miner.length;
+            const endY = miner.y + Math.sin(miner.angle) * miner.length;
+
+            ctx.beginPath();
+            ctx.moveTo(miner.x, miner.y);
+            ctx.lineTo(endX, endY);
+            ctx.strokeStyle = '#2c3e50';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Draw Claw
+            drawClaw(endX, endY, miner.angle);
+
+            // Draw Items in Sea
+            items.forEach(item => item.draw());
+
+            // Draw Held Item
+            if (miner.targetItem) {
+                const heldItem = miner.targetItem;
+                ctx.save();
+                ctx.translate(endX, endY);
+                ctx.rotate(miner.angle - Math.PI/2);
+                ctx.translate(0, 25 + heldItem.def.radius); 
+                
+                // Draw Item relative to 0,0
+                ctx.rotate(- (miner.angle - Math.PI/2) + heldItem.rotation); // Keep some rotation
+                drawScroll(0, 0, heldItem.def.radius, heldItem.def.color, heldItem.def.text, heldItem.def.type);
+                
+                ctx.restore();
+            }
+
+            // Draw Floating Texts
+            floatingTexts.forEach(ft => ft.draw());
+        }
+
+        function animate() {
+            update();
+            draw();
+            requestAnimationFrame(animate);
+        }
+
+        // Controls
+        function trigger() {
+            if (gameState === 'PLAYING' && miner.state === 'SWINGING') {
+                miner.state = 'SHOOTING';
+            }
+        }
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                if (!modal.classList.contains('hidden')) startGame();
+                else trigger();
+            }
+        });
+        canvas.addEventListener('mousedown', () => { if(modal.classList.contains('hidden')) trigger(); });
+        canvas.addEventListener('touchstart', (e) => { 
+            if(modal.classList.contains('hidden')) { trigger(); e.preventDefault(); }
+        }, {passive: false});
+
+    </script>
+</body>
+</html>
