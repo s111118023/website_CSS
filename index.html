@@ -190,6 +190,31 @@
         table.work-table td:last-child {
             text-align: left;
         }
+
+        .game-frame {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%;
+            /* 16:9 */
+            margin-top: 20px;
+            border-radius: 20px;
+            overflow: hidden;
+
+            border: 2px solid rgba(150, 170, 255, 0.8);
+            box-shadow:
+                0 0 30px rgba(120, 150, 255, 0.6),
+                inset 0 0 20px rgba(120, 140, 255, 0.4);
+        }
+
+        .game-frame iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #000;
+        }
     </style>
 </head>
 
@@ -201,6 +226,7 @@
             <a href="#section1">關於我</a>
             <a href="#section2">工作經歷</a>
             <a href="#section3">工作技能</a>
+            <a href="section-game">互動遊戲</a>
             <a href="#section4">音樂作品</a>
             <a href="#section5">視訊作品</a>
             <a href="#section6">圖片作品</a>
@@ -271,12 +297,26 @@
                 </tr>
             </table>
         </article>
+        <article id="section-game">
+            <h2>互動遊戲作品</h2>
 
+            <p>
+                《深海成績單大盜》是一款以成績焦慮與遊戲機制隱喻學習壓力的
+                Canvas 互動遊戲，結合像素風格與即時反饋系統。
+            </p>
+
+            <div class="game-frame">
+                <iframe src="game/game.html" title="深海成績單大盜" loading="lazy" allowfullscreen>
+                </iframe>
+            </div>
+        </article>
         <article id="section4">
             <h2>AI 音樂作品（Suno）</h2>
             <audio controls>
                 <source src="assets/audio/111118023.mp3" type="audio/mpeg">
             </audio>
+            <iframe src="https://suno.com/s/SiXMgy36kzGXLXpH" height="420"></iframe>
+            <iframe src="https://suno.com/s/88oIyNeAzl3Ii47M" height="420"></iframe>
         </article>
         <main>
             <article id="section5">
@@ -332,6 +372,5 @@
                 <time datetime="2025-11-30">最後更新日期：2025年12月14日</time>
             </footer>
 </body>
-
 
 </html>
